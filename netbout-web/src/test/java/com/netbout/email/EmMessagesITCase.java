@@ -32,6 +32,7 @@ import com.netbout.mock.MkBase;
 import com.netbout.spi.Alias;
 import com.netbout.spi.Bout;
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 import javax.mail.Message;
 import javax.mail.internet.MimeMultipart;
 import org.hamcrest.MatcherAssert;
@@ -74,5 +75,40 @@ public final class EmMessagesITCase {
                 )
             )
         );
+    }
+
+    /**
+     * Send mail only to subscribed aliases.
+     * @throws Exception
+     */
+    @Test
+    public void subscribeUnsubscribe() throws Exception {
+        final Postman postman = Mockito.mock(Postman.class);
+        final MkBase base = new MkBase();
+        final Alias alias = new EmAlias(base.randomAlias(), postman);
+        final Bout bout = alias.inbox().bout(alias.inbox().start());
+        final Alias friend = base.randomAlias();
+        bout.friends().invite(friend.name());
+
+        final ArgumentCaptor<Envelope> captor =
+            ArgumentCaptor.forClass(Envelope.class);
+        friend.inbox().bout(bout.number()).subscribe(false);
+        bout.messages().post("don't send it");
+        friend.inbox().bout(bout.number()).subscribe(true);
+        bout.messages().post("send it");
+        bout.messages().post("send it");
+        friend.inbox().bout(bout.number()).subscribe(false);
+        bout.messages().post("don't send it");
+        Mockito.verify(postman, Mockito.times(2)).send(captor.capture());
+        final List<Envelope> messages = captor.getAllValues();
+        for (final Envelope envelope : messages) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            MimeMultipart.class.cast(envelope.unwrap().getContent()).writeTo(baos);
+            MatcherAssert.assertThat(
+                baos.toString(), Matchers.containsString(
+                    "send it"
+                )
+            );
+        }
     }
 }
